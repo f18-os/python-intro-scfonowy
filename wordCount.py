@@ -6,14 +6,14 @@ import os
 
 # check number of arguments
 if len(sys.argv) != 3:
-    print("Invalid number of arguments. Please refer to the following example:\n\twordCount.py <inputFile>.txt <outputFile>.txt")
+    print("Error: Invalid number of arguments. Please refer to the following example:\n\twordCount.py <inputFile>.txt <outputFile>.txt")
     exit()
 
 _, inputFileName, outputFileName = sys.argv # unpack arguments
 
 # check input file exists
 if not os.path.exists(inputFileName):
-    print ("Error: passed input file does not exist. Terminating.")
+    print ("Error: passed input file does not exist.")
     exit()
 
 wordCountDictionary = {} # mapping of words to counts, i.e. word => count

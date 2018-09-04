@@ -13,3 +13,6 @@ Note that the program will overwrite the passed output file if it already exists
 
 ## Original Assignment Prompt
 The original prompt for this assignment can be found in AssignmentPrompt.md.
+
+## References
+Code for reading and checking command line arguments was sampled from the wordCountTest.py file provided with the assignment. The Python 3 documentation describing regexes in Python was referenced for splitting strings (https://docs.python.org/3/howto/regex.html). List functions (filter, sorted) and list comprehensions have been picked up over a variety of past course assignments using Python.

@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-import os, sys, re
+import os, sys, re, signal
 
 pid = os.getpid() # store shell's pid
 
@@ -29,6 +29,10 @@ def redirect(args):
         args.pop(args.index("<") + 1) # remove redirection
         args.pop(args.index("<"))
 
+'''
+Function that creates child processes and pipes I/O of input commands.
+param args : A list of string arguments read from the shell.
+'''
 def pipe(args):
     inPipe, outPipe = os.pipe()
 
@@ -37,7 +41,9 @@ def pipe(args):
     if fork_code == 0: # in child
         args = args[args.index("|") + 1:]
         os.close(outPipe)
+
         sys.stdin = os.fdopen(inPipe, "r")
+        os.dup2(sys.stdin.fileno(), 0)
         os.set_inheritable(sys.stdin.fileno(), True)
         execute(args)
     
@@ -47,20 +53,27 @@ def pipe(args):
         if fork_code == 0: # in child, again
             args = args[:args.index("|")]
             os.close(inPipe)
+
             sys.stdout = os.fdopen(outPipe, "w")
+            os.dup2(sys.stdout.fileno(), 1)
             os.set_inheritable(sys.stdout.fileno(), True)
             execute(args)
             
         elif fork_code > 0: # in parent, again
-            os.wait()
-            os.close(outPipe)
+            os.close(outPipe) # close pipe FDs
             os.close(inPipe)
+            sys.exit(0) # close this process
 
+'''
+Function that executes the passed array of input arguments.
+param args : A list of string arguments read from the shell.
+'''
 def execute(args):
-    for dir in directories: # try each directory in PATH and current working directory
-        program = "%s/%s" % (dir, args[0])
-        if os.path.exists(program):
-            os.execve(program, args, os.environ)
+    if len(args) > 0:
+        for dir in directories: # try each directory in PATH and current working directory
+            program = "%s/%s" % (dir, args[0])
+            if os.path.exists(program):
+                os.execve(program, args, os.environ)
 
 ### main
 while True:
@@ -68,6 +81,9 @@ while True:
     prompt = ("%s$ " % (os.getcwd())) if ("PS1" not in os.environ) else os.environ["PS1"]
 
     try:
+        sys.stdin.flush() # flush I/O buffers (resolves some issues with piping)
+        sys.stdout.flush()
+
         args = str(input(prompt)).split() # get user input and split on spaces
         fork_code = os.fork()
 
@@ -84,6 +100,8 @@ while True:
                 execute(args)
             elif "|" in args:
                 pipe(args) # handle pipes
+            else:
+                execute(args) # just execute command w/ args
 
         elif fork_code > 0: # in parent, wait for child process
             os.wait()

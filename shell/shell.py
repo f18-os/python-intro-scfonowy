@@ -29,27 +29,67 @@ def redirect(args):
         args.pop(args.index("<") + 1) # remove redirection
         args.pop(args.index("<"))
 
-
-### main
-while True:
-    args = str(input("%s$ " % (os.getcwd()))).split() # get user input and split on spaces
+def pipe(args):
+    inPipe, outPipe = os.pipe()
 
     fork_code = os.fork()
 
     if fork_code == 0: # in child
-        directories = re.split(":", os.environ['PATH'])
-        directories.append(os.getcwd())
+        args = args[args.index("|") + 1:]
+        os.close(outPipe)
+        sys.stdin = os.fdopen(inPipe, "r")
+        os.set_inheritable(sys.stdin.fileno(), True)
+        execute(args)
+    
+    elif fork_code > 0: # in parent
+        fork_code = os.fork()
 
-        redirect(args) # handle any redirections
+        if fork_code == 0: # in child, again
+            args = args[:args.index("|")]
+            os.close(inPipe)
+            sys.stdout = os.fdopen(outPipe, "w")
+            os.set_inheritable(sys.stdout.fileno(), True)
+            execute(args)
+            
+        elif fork_code > 0: # in parent, again
+            os.wait()
+            os.close(outPipe)
+            os.close(inPipe)
 
-        for dir in directories: # try each directory in PATH and current working directory
-            program = "%s/%s" % (dir, args[0])
-            if os.path.exists(program):
-                os.execve(program, args, os.environ)
+def execute(args):
+    for dir in directories: # try each directory in PATH and current working directory
+        program = "%s/%s" % (dir, args[0])
+        if os.path.exists(program):
+            os.execve(program, args, os.environ)
 
-    elif fork_code > 0: # in parent, wait for child process
-        os.wait()
+### main
+while True:
+    # check for PS1 variable in environment
+    prompt = ("%s$ " % (os.getcwd())) if ("PS1" not in os.environ) else os.environ["PS1"]
 
-    else: # error
-        os.write(2, "ERROR: Unable to fork.\n".encode())
-        sys.exit(1)
+    try:
+        args = str(input(prompt)).split() # get user input and split on spaces
+        fork_code = os.fork()
+
+        if fork_code == 0: # in child
+            directories = re.split(":", os.environ['PATH'])
+            directories.append(os.getcwd())
+            directories.append("")
+
+            if ("<" in args or ">" in args) and "|" in args:
+                os.write(2, "ERROR: Unable to process both pipe and redirect.")
+                continue
+            elif ("<" in args or ">" in args):
+                redirect(args) # handle any redirections
+                execute(args)
+            elif "|" in args:
+                pipe(args) # handle pipes
+
+        elif fork_code > 0: # in parent, wait for child process
+            os.wait()
+
+        else: # error
+            os.write(2, "ERROR: Unable to fork.\n".encode())
+            sys.exit(1)
+    except EOFError:
+        exit()

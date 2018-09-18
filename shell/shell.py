@@ -78,13 +78,19 @@ def execute(args):
 ### main
 while True:
     # check for PS1 variable in environment
-    prompt = ("%s$ " % (os.getcwd())) if ("PS1" not in os.environ) else os.environ["PS1"]
+    prompt = ("%i$ " % (os.getpid())) if "PS1" not in os.environ else os.environ["PS1"]
 
     try:
         sys.stdin.flush() # flush I/O buffers (resolves some issues with piping)
         sys.stdout.flush()
 
         args = str(input(prompt)).split() # get user input and split on spaces
+
+        background = False # check if command should run in background
+        if "&" in args:
+            args.pop(args.index("&"))
+            background = True
+
         fork_code = os.fork()
 
         if fork_code == 0: # in child
@@ -104,7 +110,8 @@ while True:
                 execute(args) # just execute command w/ args
 
         elif fork_code > 0: # in parent, wait for child process
-            os.wait()
+            if not background:
+                os.wait()
 
         else: # error
             os.write(2, "ERROR: Unable to fork.\n".encode())

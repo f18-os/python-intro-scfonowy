@@ -74,11 +74,13 @@ def execute(args):
             program = "%s/%s" % (dir, args[0])
             if os.path.exists(program):
                 os.execve(program, args, os.environ)
+    else: # no commands to execute, terminate
+        sys.exit(0)
 
 ### main
 while True:
     # check for PS1 variable in environment
-    prompt = ("%i$ " % (os.getpid())) if "PS1" not in os.environ else os.environ["PS1"]
+    prompt = ("%s$ " % (os.getcwd())) if "PS1" not in os.environ else os.environ["PS1"]
 
     try:
         sys.stdin.flush() # flush I/O buffers (resolves some issues with piping)
@@ -86,11 +88,18 @@ while True:
 
         args = str(input(prompt)).split() # get user input and split on spaces
 
+        if "cd" in args: # handle directory change
+            try:
+                os.chdir(args[args.index("cd") + 1])
+            except:
+                os.write(2, "ERROR: Unable to change directories.")
+            continue
+        
         background = False # check if command should run in background
         if "&" in args:
             args.pop(args.index("&"))
             background = True
-
+        
         fork_code = os.fork()
 
         if fork_code == 0: # in child

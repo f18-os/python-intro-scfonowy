@@ -1,49 +1,53 @@
 #! /usr/bin/env python3
 
-import os, sys, re, signal
+import os, sys, re
 
-pid = os.getpid() # store shell's pid
 
-'''
-Function that handles redirection arguments in an array of input arguments.
-param args : A list of string arguments read from the shell.
-'''
 def redirect(args):
+    """
+    Function that handles redirection arguments in an array of input arguments. This function removes the redirection symbols and the source/destination of the redirections.
+
+    Arguments:
+    args -- A list of string arguments that includes at least one I/O redirection.
+    """
     if ">" in args:
-        os.close(1) # close standard out
         filename = args[args.index(">") + 1] # get filename
 
         sys.stdout = open(filename, "w+") # set standard output
+        os.dup2(sys.stdout.fileno(), 1) # dup2 closes stdout and copies new output FD
         os.set_inheritable(sys.stdout.fileno(), True)
 
         args.pop(args.index(">") + 1) # remove redirection
         args.pop(args.index(">"))
 
     if "<" in args:
-        os.close(0) # close standard in
         filename = args[args.index("<") + 1] # get filename
 
         sys.stdin = open(filename, "r") # set standard input
+        os.dup2(sys.stdin.fileno(), 0) # dup2 closes stdin and copies new input FD
         os.set_inheritable(sys.stdin.fileno(), True)
 
         args.pop(args.index("<") + 1) # remove redirection
         args.pop(args.index("<"))
 
-'''
-Function that creates child processes and pipes I/O of input commands.
-param args : A list of string arguments read from the shell.
-'''
+
 def pipe(args):
+    """
+    Function that creates child processes and pipes I/O of input commands.
+
+    Arguments:
+    args -- A list of string arguments, split by a single pipe.
+    """
     inPipe, outPipe = os.pipe()
 
     fork_code = os.fork()
 
     if fork_code == 0: # in child
         args = args[args.index("|") + 1:]
-        os.close(outPipe)
+        os.close(outPipe) # close unused out FD
 
         sys.stdin = os.fdopen(inPipe, "r")
-        os.dup2(sys.stdin.fileno(), 0)
+        os.dup2(sys.stdin.fileno(), 0) # need to dup over stdin 0
         os.set_inheritable(sys.stdin.fileno(), True)
         execute(args)
     
@@ -52,23 +56,29 @@ def pipe(args):
 
         if fork_code == 0: # in child, again
             args = args[:args.index("|")]
-            os.close(inPipe)
+            os.close(inPipe) # close unused in FD
 
             sys.stdout = os.fdopen(outPipe, "w")
-            os.dup2(sys.stdout.fileno(), 1)
+            os.dup2(sys.stdout.fileno(), 1) # need to dup over stdout 1
             os.set_inheritable(sys.stdout.fileno(), True)
             execute(args)
             
         elif fork_code > 0: # in parent, again
-            os.close(outPipe) # close pipe FDs
+            os.close(outPipe) # close both pipe FDs
             os.close(inPipe)
-            sys.exit(0) # close this process
 
-'''
-Function that executes the passed array of input arguments.
-param args : A list of string arguments read from the shell.
-'''
+            sys.exit(0) # close this process (only used to create the child processes)
+    else: # unable to fork
+        os.write(2, "ERROR: Unable to fork.\n".encode())
+
+
 def execute(args):
+    """
+    Function that executes the passed array of input arguments, passing the first argument to execve.
+
+    Arguments:
+    args -- A list of string arguments, the first of which is the program to run.
+    """
     if len(args) > 0:
         for dir in directories: # try each directory in PATH and current working directory
             program = "%s/%s" % (dir, args[0])
@@ -95,20 +105,19 @@ while True:
                 os.write(2, "ERROR: Unable to change directories.")
             continue
         
-        background = False # check if command should run in background
-        if "&" in args:
+        background = "&" in args # check if command should run in background
+        if background:
             args.pop(args.index("&"))
-            background = True
         
         fork_code = os.fork()
 
         if fork_code == 0: # in child
-            directories = re.split(":", os.environ['PATH'])
-            directories.append(os.getcwd())
-            directories.append("")
+            directories = re.split(":", os.environ['PATH']) # get all directories in PATH
+            directories.append(os.getcwd()) # add the current working directory
+            directories.append("") # add root directory (for full name programs)
 
             if ("<" in args or ">" in args) and "|" in args:
-                os.write(2, "ERROR: Unable to process both pipe and redirect.")
+                os.write(2, "ERROR: Unable to process both pipe and redirect, sorry.")
                 continue
             elif ("<" in args or ">" in args):
                 redirect(args) # handle any redirections
@@ -125,5 +134,5 @@ while True:
         else: # error
             os.write(2, "ERROR: Unable to fork.\n".encode())
             sys.exit(1)
-    except EOFError:
+    except EOFError: # terminates on EOF character (CTRL-D)
         exit()

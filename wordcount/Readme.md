@@ -1,6 +1,6 @@
 # CS4375 - Intro to Python Assignment
 --
-*Steven Brooks, last update September 3rd, 2018*
+* super anonymous student, last update September 3rd, 2018*
 ## Overview
 This short Python 3 script reads in an input text (.txt) file and outputs a text (.txt) file that contains all words in the input text, sorted, along with the number of occurrences of each word. Note that words are delimited by any non-alphanumeric character, i.e. "it's" will be counted as "it" and "s". This conforms to the test cases provided by the instructor.
 

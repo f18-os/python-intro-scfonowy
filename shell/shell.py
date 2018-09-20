@@ -2,7 +2,6 @@
 
 import os, sys, re
 
-
 def redirect(args):
     """
     Function that handles redirection arguments in an array of input arguments. This function removes the redirection symbols and the source/destination of the redirections.
@@ -40,9 +39,9 @@ def pipe(args):
     """
     inPipe, outPipe = os.pipe()
 
-    fork_code = os.fork()
+    fork_code = os.fork() # fork off for receiving process
 
-    if fork_code == 0: # in child
+    if fork_code == 0: # in child, configure receiving program
         args = args[args.index("|") + 1:]
         os.close(outPipe) # close unused out FD
 
@@ -51,10 +50,10 @@ def pipe(args):
         os.set_inheritable(sys.stdin.fileno(), True)
         execute(args)
     
-    elif fork_code > 0: # in parent
+    elif fork_code > 0: # in parent, fork off again for output process
         fork_code = os.fork()
 
-        if fork_code == 0: # in child, again
+        if fork_code == 0: # in child, configure output program
             args = args[:args.index("|")]
             os.close(inPipe) # close unused in FD
 
@@ -63,7 +62,7 @@ def pipe(args):
             os.set_inheritable(sys.stdout.fileno(), True)
             execute(args)
             
-        elif fork_code > 0: # in parent, again
+        elif fork_code > 0: # in parent process
             os.close(outPipe) # close both pipe FDs
             os.close(inPipe)
 
@@ -89,7 +88,7 @@ def execute(args):
 
 ### main
 while True:
-    # check for PS1 variable in environment
+    # check for PS1 variable in environment and set prompt statement accordingly
     prompt = ("%s$ " % (os.getcwd())) if "PS1" not in os.environ else os.environ["PS1"]
 
     try:
@@ -103,36 +102,36 @@ while True:
                 os.chdir(args[args.index("cd") + 1])
             except:
                 os.write(2, "ERROR: Unable to change directories.")
-            continue
+            continue # no command to execute, skip rest of loop
         
         background = "&" in args # check if command should run in background
         if background:
             args.pop(args.index("&"))
         
-        fork_code = os.fork()
+        fork_code = os.fork() # create process to handle program execution
 
         if fork_code == 0: # in child
             directories = re.split(":", os.environ['PATH']) # get all directories in PATH
             directories.append(os.getcwd()) # add the current working directory
             directories.append("") # add root directory (for full name programs)
 
-            if ("<" in args or ">" in args) and "|" in args:
+            if ("<" in args or ">" in args) and "|" in args: # error case: i'm not smart enough for both at once, sorry
                 os.write(2, "ERROR: Unable to process both pipe and redirect, sorry.")
-                continue
+                sys.exit(0) # terminate this process
             elif ("<" in args or ">" in args):
-                redirect(args) # handle any redirections
+                redirect(args) # handle any redirections before executing
                 execute(args)
             elif "|" in args:
                 pipe(args) # handle pipes
             else:
                 execute(args) # just execute command w/ args
 
-        elif fork_code > 0: # in parent, wait for child process
+        elif fork_code > 0: # in parent, wait for child process to finish
             if not background:
                 os.wait()
 
-        else: # error
+        else: # error case
             os.write(2, "ERROR: Unable to fork.\n".encode())
             sys.exit(1)
-    except EOFError: # terminates on EOF character (CTRL-D)
+    except EOFError: # shell terminates on EOF character (CTRL-D)
         exit()
